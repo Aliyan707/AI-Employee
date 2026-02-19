@@ -128,6 +128,16 @@ coverage/
 *.sqlite3
 
 # ============================================
+# MCP Server Credentials & Sessions
+# ============================================
+mcp-servers/*/gmail-credentials.json
+mcp-servers/*/gmail-token.json
+mcp-servers/*/linkedin-session/
+mcp-servers/*/odoo_password.txt
+*password.txt
+*_password.txt
+
+# ============================================
 # MCP Server Build Artifacts
 # ============================================
 mcp-servers/*/node_modules/
