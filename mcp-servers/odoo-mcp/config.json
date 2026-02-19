@@ -1,0 +1,127 @@
+{
+  "name": "odoo-mcp",
+  "version": "1.0.0",
+  "description": "Odoo ERP MCP server for Gold-tier AI Employee",
+  "protocol": "stdio",
+  "tools": [
+    {
+      "name": "odoo_create_draft_invoice",
+      "description": "Create draft invoice in Odoo ERP (no approval needed for draft)",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "partner_name": {
+            "type": "string",
+            "description": "Customer/vendor name (will search for Odoo partner ID)"
+          },
+          "amount": {
+            "type": "number",
+            "description": "Invoice amount"
+          },
+          "currency": {
+            "type": "string",
+            "description": "Currency code (default: PKR)",
+            "default": "PKR"
+          },
+          "description": {
+            "type": "string",
+            "description": "Invoice description/reference"
+          },
+          "invoice_date": {
+            "type": "string",
+            "description": "Invoice date (YYYY-MM-DD) or null for today",
+            "format": "date"
+          }
+        },
+        "required": ["partner_name", "amount"]
+      }
+    },
+    {
+      "name": "odoo_confirm_invoice",
+      "description": "Confirm/validate draft invoice (REQUIRES approval file in Approved/)",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "draft_id": {
+            "type": "integer",
+            "description": "Odoo invoice ID to confirm"
+          },
+          "approval_file": {
+            "type": "string",
+            "description": "REQUIRED: Path to approval file in Approved/ folder"
+          }
+        },
+        "required": ["draft_id", "approval_file"]
+      }
+    },
+    {
+      "name": "odoo_post_invoice",
+      "description": "Post invoice to ledger (REQUIRES approval file in Approved/)",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "draft_id": {
+            "type": "integer",
+            "description": "Odoo invoice ID to post"
+          },
+          "approval_file": {
+            "type": "string",
+            "description": "REQUIRED: Path to approval file in Approved/ folder"
+          }
+        },
+        "required": ["draft_id", "approval_file"]
+      }
+    },
+    {
+      "name": "odoo_search_invoices",
+      "description": "Search/read invoices (read-only, no approval needed for audit queries)",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "description": "Invoice state filter (draft, posted, cancel, etc.)",
+            "enum": ["draft", "posted", "cancel"]
+          },
+          "date_from": {
+            "type": "string",
+            "description": "Start date filter (YYYY-MM-DD)",
+            "format": "date"
+          },
+          "date_to": {
+            "type": "string",
+            "description": "End date filter (YYYY-MM-DD)",
+            "format": "date"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum results to return (default 100)",
+            "default": 100
+          }
+        }
+      }
+    }
+  ],
+  "configuration": {
+    "ODOO_URL": {
+      "type": "string",
+      "description": "Odoo instance URL (e.g., http://localhost:8069)",
+      "required": true
+    },
+    "ODOO_DB": {
+      "type": "string",
+      "description": "Odoo database name",
+      "required": true
+    },
+    "ODOO_USERNAME": {
+      "type": "string",
+      "description": "Odoo username with accounting permissions",
+      "required": true
+    },
+    "ODOO_PASSWORD_FILE": {
+      "type": "string",
+      "description": "Path to file containing Odoo password (for security)",
+      "required": true
+    }
+  }
+}

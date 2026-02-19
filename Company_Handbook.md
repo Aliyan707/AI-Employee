@@ -19,11 +19,30 @@
 - Friday is a light workday (prioritize urgent only)
 
 ## Business Rules
+
+### Approval Thresholds (Gold-Tier)
+- **Dual approval required:** All payments >PKR 50,000
+- **Unusual transaction flag:** Any transaction >PKR 25,000 outside normal patterns
+- **Subscription monitoring:** Flag any subscription with no usage in 30 days
+- **New payees:** ALWAYS require approval before first payment
+- **Irreversible actions:** ALWAYS require approval (Odoo post, social media publish, data deletion)
+
+### Financial Operations (Odoo)
+- Invoice drafts: Auto-create, require approval before posting
+- Payment drafts: Auto-create, require approval before posting
+- All Odoo confirm/post actions: MUST have file in Approved/ folder
+- Journal entries: Require approval for all manual entries
+
+### Social Media (Multi-Platform)
+- **Maximum posts per day:** 3 across ALL platforms (LinkedIn, Facebook, Instagram, Twitter/X)
+- **Preferred posting times:** 10:00 AM PKT, 3:00 PM PKT, 7:00 PM PKT
+- **ALL posts:** Require approval before publishing via browser-mcp
+- **Karachi local hashtags:** Always include #KarachiBusinesses or #PakistanStartups when relevant
+
+### Communication
 - New clients ALWAYS require human approval before outreach
-- Invoice/payment discussions ALWAYS require approval
+- Email response time target: within 4 hours during business hours (09:00-18:00 PKT)
 - Attachments >1MB require review
-- LinkedIn posts: 1-2 per day maximum (10 AM and 3 PM PKT preferred)
-- Email response time target: within 4 hours during business hours
 
 ## Keywords Requiring Human Review
 - payment, invoice, bill, charge, refund, receipt
