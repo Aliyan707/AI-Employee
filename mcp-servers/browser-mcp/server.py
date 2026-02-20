@@ -157,37 +157,64 @@ def _post_linkedin_sync(content: str) -> None:
         try:
             # Check login status
             page.goto("https://www.linkedin.com/feed/", wait_until="domcontentloaded")
-            page.wait_for_timeout(2000)
+            page.wait_for_timeout(3000)
 
             if "feed" not in page.url:
-                log.info("Session expired — logging in...")
+                log.info("Session expired or 2FA required — logging in...")
                 if not LINKEDIN_EMAIL or not LINKEDIN_PASSWORD:
                     raise RuntimeError(
                         "LINKEDIN_EMAIL and LINKEDIN_PASSWORD required. "
                         "Set them in mcp-servers/browser-mcp/.env"
                     )
-                page.goto("https://www.linkedin.com/login")
-                page.fill("#username", LINKEDIN_EMAIL)
-                page.fill("#password", LINKEDIN_PASSWORD)
-                page.click('button[type="submit"]')
-                page.wait_for_url("**/feed/**", timeout=20000)
-                log.info("Login successful — session saved")
+                # Only fill login form if we're on a login page (not a checkpoint)
+                if "login" in page.url or "signin" in page.url or "uas/login" in page.url:
+                    log.info("Filling login form...")
+                    page.goto("https://www.linkedin.com/login")
+                    page.wait_for_timeout(1500)
+                    page.fill("#username", LINKEDIN_EMAIL)
+                    page.fill("#password", LINKEDIN_PASSWORD)
+                    page.click('button[type="submit"]')
+                    log.info("Credentials submitted. Waiting for feed or 2FA (up to 90s — user may need to complete 2FA)...")
+                else:
+                    log.info("On checkpoint/verify page. Waiting for user to complete verification (up to 90s)...")
+                # Wait up to 90 seconds for feed — gives user time to complete 2FA/OTP
+                page.wait_for_url("**/feed/**", timeout=90000)
+                page.wait_for_timeout(2000)
+                log.info("Login/verification successful — session saved")
 
-            # Open post composer
+            log.info("On LinkedIn feed. Current URL: %s", page.url)
+
+            # Open post composer — try multiple selectors for LinkedIn's current UI
             log.info("Opening post composer...")
+            # First try: click on the "Start a post" text input area at top of feed
             composer_selectors = [
-                '[data-control-name="share.sharebox_open"]',
-                'button:has-text("Start a post")',
+                # LinkedIn 2024-2026 main feed composer (text input trigger area)
+                '[data-view-name="share-box-trigger"]',
+                'button.share-box-feed-entry__trigger',
                 '[class*="share-box-feed-entry__trigger"]',
-                'button:has-text("Post")',
+                # Aria-label based selectors
+                '[aria-label="Start a post"]',
+                '[aria-label="Create a post"]',
+                '[aria-label="Write a post"]',
+                # Text-based (Playwright :has-text is case-insensitive)
+                'button:has-text("Start a post")',
+                'div[role="button"]:has-text("Start a post")',
+                'span:has-text("Start a post")',
+                # Fallback data-control selectors
+                '[data-control-name="share.sharebox_open"]',
+                # Generic feed composer placeholder text (clicks the input zone)
+                '[placeholder*="mind"]',
+                '[placeholder*="post"]',
             ]
             clicked = False
             for sel in composer_selectors:
                 try:
                     btn = page.locator(sel).first
-                    btn.wait_for(timeout=5000)
+                    btn.wait_for(state="visible", timeout=4000)
+                    btn.scroll_into_view_if_needed()
                     btn.click()
                     clicked = True
+                    log.info("Composer opened via selector: %s", sel)
                     break
                 except Exception:
                     continue

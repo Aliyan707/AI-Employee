@@ -1,0 +1,52 @@
+# RECOVERY FLAG - filesystem_watcher Crash Loop
+**Created:** 2026-02-20 12:21 PKT
+**Created By:** gold-main-orchestrator
+**Priority:** MEDIUM
+**Cycle:** 20260220-1221
+
+---
+
+## ERROR: filesystem_watcher Repeated Crashes
+
+**Affected Service:** filesystem_watcher (process monitor managed)
+**Log File:** Logs/filesystem_watcher.log, Logs/2026-02-20.md
+**Error Pattern:** Process exits with code 1 on startup, watchdog restarts it
+
+### Crash Timeline (2026-02-20)
+| Timestamp            | Event                                      |
+|----------------------|--------------------------------------------|
+| 2026-02-20 12:14 PKT | filesystem_watcher crashed (exit=1)        |
+| 2026-02-20 12:14 PKT | Watchdog restarted - attempt 1             |
+| 2026-02-20 12:15 PKT | filesystem_watcher crashed (exit=1) again  |
+| 2026-02-20 12:15 PKT | Watchdog restarted - attempt 2             |
+| 2026-02-20 12:19 PKT | filesystem_watcher started successfully    |
+
+### Current Status
+The watcher is currently running (last log: 2026-02-20 12:19:25 PKT showing
+"Observer started, watching for files..."). The crash loop appears to have
+resolved after 2 restart attempts. However, the root cause is unconfirmed.
+
+### Likely Root Causes
+1. Drop folder did not exist when watcher started (race condition)
+2. File permission issue on C:\Users\Cs\Desktop\AI Employee-\Drop
+3. Python dependency missing (watchdog library not installed)
+4. Environment variable issue similar to PM2 CLAUDECODE crash loop
+
+### Suggested Recovery Checks
+1. Verify Drop/ folder exists and is readable
+2. Check Python environment has `watchdog` package installed
+3. Monitor for further crashes - if crash repeats, escalate to Aliyan
+4. Consider adding --retry-on-error logic to watcher script
+
+### Prior Recovery Flag
+RECOVERY_NEEDED_2026-02-19-2103.flag also still active:
+- PM2 sub-agent crash loop (CLAUDECODE env variable) - UNRESOLVED
+- Facebook auto-poster UI selector failure - UNRESOLVED
+- APPROVED/Social/FACEBOOK_POST_20260219_223159.md still not posted
+
+## Agent Assignment
+- **Process monitor:** Continue watchdog supervision of filesystem_watcher
+- **Aliyan (human):** Review if PM2 CLAUDECODE fix has been applied (see prior flag)
+- **Social agent:** FACEBOOK_POST_20260219_223159.md retry still needed
+
+**RESOLVED WHEN:** filesystem_watcher runs 24h without crash AND PM2 agents operational
