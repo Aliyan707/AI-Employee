@@ -1,0 +1,93 @@
+# RECOVERY FLAG - Multiple System Errors
+**Created:** 2026-02-19 21:03:43 PKT
+**Created By:** gold-main-orchestrator
+**Priority:** HIGH
+
+---
+
+## ERROR 1: CRITICAL - PM2 Sub-Agent Crash Loop (All Agents Affected)
+
+**Affected Agents:**
+- pm2_main.log: Gold Main Orchestrator - CRASH LOOP
+- pm2_accounting.log: Accounting Sub-Agent - CRASH LOOP
+- pm2_social.log: Social Media Manager - CRASH LOOP
+- pm2_finance.log: Finance Audit Agent - CRASH LOOP
+- pm2_approval.log: Approval Handler - CRASH LOOP
+
+**Error Pattern:** `Claude Code cannot be launched inside another Claude Code session`
+**Error Frequency:** Every 3-4 seconds across all agents (~20+ crashes per agent)
+**Error Log Files:**
+- `Logs/pm2_main.log`
+- `Logs/pm2_accounting.log`
+- `Logs/pm2_social.log`
+- `Logs/pm2_finance.log`
+- `Logs/pm2_approval.log`
+
+**Root Cause:**
+PM2 scripts attempt to launch Claude Code (`claude` CLI) as a subprocess while Claude Code is already running. The CLAUDECODE environment variable is set in the parent process, blocking all nested invocations.
+
+**System Impact:** SEVERE - No autonomous sub-agents can operate via PM2 launch scripts
+**Error Rate:** 100% failure on all PM2-launched agents
+
+**Recovery Action Required:**
+```
+# Option A: Unset CLAUDECODE before launching sub-agents
+unset CLAUDECODE && pm2 restart all
+
+# Option B: Modify launch scripts to unset env var
+# In launch_accounting.sh, launch_social.sh, etc., add:
+# export -n CLAUDECODE
+
+# Option C: Run sub-agents directly in separate terminal windows
+# without the CLAUDECODE variable set
+```
+
+**Who Should Fix:** Aliyan (human) - requires modifying launch scripts or terminal environment
+
+---
+
+## ERROR 2: MEDIUM - LinkedIn Auto-Poster Repeated Timeouts
+
+**Affected Service:** linkedin-auto-poster (scripts/linkedin_auto_poster.js)
+**Status:** 4 failures, then 1 eventual success
+**Error Pattern:** Browser navigation timeouts on linkedin.com
+- `page.waitForURL: Target page, context or browser has been closed` (attempt 1)
+- `page.waitForURL: Timeout 30000ms exceeded` (attempt 2)
+- `page.waitForURL: Timeout 60000ms exceeded` (attempt 3)
+- `page.goto: Timeout 30000ms exceeded` (attempt 4)
+**Log File:** `Logs/linkedin_20260219.jsonl`
+**Resolution:** Post eventually published successfully (attempt 5)
+
+**Suggested Fix:**
+- Add exponential backoff retry logic
+- Increase navigation timeout to 90000ms
+- Add CAPTCHA/challenge detection and HITL flag
+
+---
+
+## ERROR 3: MEDIUM - Facebook Auto-Poster UI Selector Failure
+
+**Affected Service:** facebook-auto-poster (scripts/facebook_auto_poster.js)
+**Status:** UNRESOLVED - post NOT published
+**Error:** `Could not find "Create post" button` at line 150
+**Log File:** `Logs/facebook_20260219.jsonl`
+**Remaining File:** `Approved/Social/FACEBOOK_POST_20260219_223159.md`
+
+**Suggested Fix:**
+- Inspect current Facebook UI structure
+- Update button selector at facebook_auto_poster.js:150
+- Test with updated selector before retrying
+
+---
+
+## Files Needing Attention
+- `Approved/Social/FACEBOOK_POST_20260219_223159.md` - NOT YET POSTED
+- `Approved/Social/TWITTER_POST_20260219_223159.md` - verify status
+- All PM2 launch scripts need CLAUDECODE env fix
+
+## Agent Assignment
+- **Aliyan (human):** Fix PM2 env variable issue (CRITICAL)
+- **social-media-manager:** Fix Facebook selector, retry Facebook post
+- **gold-main-orchestrator:** Monitor for resolution
+
+**RESOLVED WHEN:** PM2 agents run without crash AND Facebook post published

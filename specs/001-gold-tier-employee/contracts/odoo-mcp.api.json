@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-employee.local/schemas/odoo-mcp-api.json",
+  "title": "Odoo MCP Server API",
+  "description": "Custom MCP server for Odoo ERP Community 19+ integration (JSON-RPC)",
+  "methods": {
+    "create_draft": {
+      "description": "Create draft invoice/payment/journal entry in Odoo (no approval required)",
+      "params": {
+        "type": "object",
+        "required": ["model", "values"],
+        "properties": {
+          "model": {
+            "type": "string",
+            "enum": ["account.move", "account.payment", "account.move.line"],
+            "description": "Odoo model name"
+          },
+          "values": {
+            "type": "object",
+            "required": ["partner_id", "move_type"],
+            "properties": {
+              "partner_id": { "type": "integer", "description": "Odoo partner ID" },
+              "move_type": { "type": "string", "enum": ["out_invoice", "in_invoice", "out_refund", "in_refund"] },
+              "invoice_date": { "type": "string", "format": "date" },
+              "invoice_line_ids": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "product_id": { "type": "integer" },
+                    "quantity": { "type": "number" },
+                    "price_unit": { "type": "number" },
+                    "name": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "properties": {
+          "draft_id": { "type": "integer", "description": "Odoo record ID (draft state)" },
+          "preview_url": { "type": "string", "format": "uri", "description": "URL to view draft in Odoo web UI" },
+          "state": { "type": "string", "enum": ["draft"] }
+        }
+      },
+      "approval_required": false
+    },
+    "confirm": {
+      "description": "Confirm draft invoice/payment (approval REQUIRED - check Approved/ folder)",
+      "params": {
+        "type": "object",
+        "required": ["model", "draft_id"],
+        "properties": {
+          "model": { "type": "string", "enum": ["account.move", "account.payment"] },
+          "draft_id": { "type": "integer", "description": "Odoo draft record ID" }
+        }
+      },
+      "result": {
+        "type": "object",
+        "properties": {
+          "confirmed_id": { "type": "integer" },
+          "state": { "type": "string", "enum": ["confirmed", "posted"] }
+        }
+      },
+      "approval_required": true,
+      "approval_check": "MUST verify file exists in Approved/ with draft_id before calling"
+    },
+    "post": {
+      "description": "Post invoice to accounting ledger (approval REQUIRED - check Approved/ folder)",
+      "params": {
+        "type": "object",
+        "required": ["model", "draft_id"],
+        "properties": {
+          "model": { "type": "string", "enum": ["account.move"] },
+          "draft_id": { "type": "integer" }
+        }
+      },
+      "result": {
+        "type": "object",
+        "properties": {
+          "posted_id": { "type": "integer" },
+          "move_id": { "type": "integer", "description": "Journal entry ID" },
+          "state": { "type": "string", "enum": ["posted"] }
+        }
+      },
+      "approval_required": true,
+      "approval_check": "MUST verify file exists in Approved/ with draft_id before calling"
+    },
+    "search_records": {
+      "description": "Read-only search for Odoo records (no approval required - for audit data collection)",
+      "params": {
+        "type": "object",
+        "required": ["model", "domain"],
+        "properties": {
+          "model": { "type": "string", "description": "Odoo model name (e.g., 'account.move', 'res.partner')" },
+          "domain": {
+            "type": "array",
+            "description": "Odoo search domain filters",
+            "items": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "items": [
+                { "type": "string", "description": "Field name" },
+                { "type": "string", "description": "Operator (=, !=, >, <, in, like, etc.)" },
+                { "description": "Value (type varies)" }
+              ]
+            },
+            "examples": [
+              [["state", "=", "posted"], ["invoice_date", ">=", "2026-02-09"]]
+            ]
+          },
+          "fields": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Fields to return (default: all fields)"
+          },
+          "limit": { "type": "integer", "default": 100, "description": "Max records to return" }
+        }
+      },
+      "result": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "description": "Odoo record with requested fields"
+        }
+      },
+      "approval_required": false
+    }
+  },
+  "error_codes": {
+    "ODOO_CONNECTION_FAILURE": "Cannot connect to Odoo server (transient - retry)",
+    "ODOO_AUTH_FAILURE": "Invalid Odoo credentials (persistent - flag for human)",
+    "ODOO_RECORD_NOT_FOUND": "Draft ID does not exist (persistent - flag for human)",
+    "ODOO_VALIDATION_ERROR": "Odoo rejected data (persistent - log details, flag for human)",
+    "MCP_TIMEOUT": "MCP call exceeded 30s timeout (transient - retry)"
+  },
+  "retry_policy": {
+    "transient_errors": ["ODOO_CONNECTION_FAILURE", "MCP_TIMEOUT"],
+    "retry_schedule": ["1min", "5min", "15min"],
+    "max_attempts": 3,
+    "backoff_type": "exponential"
+  }
+}

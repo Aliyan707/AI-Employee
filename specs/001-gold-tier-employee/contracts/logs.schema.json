@@ -1,0 +1,229 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-employee.local/schemas/log-entry.json",
+  "title": "Log Entry (JSON Lines Format)",
+  "description": "Audit record logged to Logs/YYYY-MM-DD.jsonl (one JSON object per line)",
+  "type": "object",
+  "required": ["timestamp", "agent", "action", "status", "metadata"],
+  "properties": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": ".*\\+05:00$",
+      "description": "ISO 8601 with PKT timezone (+05:00) - e.g., 2026-02-15T14:30:00+05:00"
+    },
+    "agent": {
+      "type": "string",
+      "enum": [
+        "main-orchestrator",
+        "accounting-sub-agent",
+        "social-media-sub-agent",
+        "finance-auditor-sub-agent",
+        "approval-sub-agent"
+      ],
+      "description": "Which agent logged this entry"
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "claim_file",
+        "draft_created",
+        "approval_granted",
+        "approval_rejected",
+        "action_executed",
+        "mcp_call",
+        "error",
+        "recovery_attempt",
+        "weekly_audit_trigger",
+        "briefing_generated"
+      ],
+      "description": "What action was taken"
+    },
+    "file": {
+      "type": ["string", "null"],
+      "pattern": "^[A-Z_]+_[a-zA-Z0-9_-]+\\.md$",
+      "description": "Vault file being processed (null if not file-specific)"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "needs_action",
+        "in_progress",
+        "pending_approval",
+        "approved",
+        "completed",
+        "rejected",
+        "error",
+        "recovering",
+        "resolved",
+        "escalated"
+      ],
+      "description": "Current status after this action"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Context-specific details (nested JSON allowed)",
+      "additionalProperties": true
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "action": { "const": "mcp_call" } }
+      },
+      "then": {
+        "required": ["mcp", "method", "params", "result"],
+        "properties": {
+          "mcp": {
+            "type": "string",
+            "enum": ["odoo-mcp", "browser-mcp", "email-mcp"],
+            "description": "Which MCP server was called"
+          },
+          "method": {
+            "type": "string",
+            "description": "MCP method name (e.g., create_draft, confirm, post, navigate)"
+          },
+          "params": {
+            "type": "object",
+            "description": "MCP method parameters"
+          },
+          "result": {
+            "type": "object",
+            "description": "MCP method result (or error object if failed)"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "action": { "pattern": "approval_(granted|rejected)" } }
+      },
+      "then": {
+        "required": ["approver", "approval_time"],
+        "properties": {
+          "approver": {
+            "type": "string",
+            "enum": ["human", "timeout"],
+            "description": "Who made approval decision"
+          },
+          "approval_time": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When approval was granted/rejected"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "action": { "const": "error" } }
+      },
+      "then": {
+        "required": ["error_type", "error_message", "retry_attempt"],
+        "properties": {
+          "error_type": {
+            "type": "string",
+            "enum": [
+              "mcp_timeout",
+              "odoo_connection_failure",
+              "odoo_auth_failure",
+              "selector_not_found",
+              "navigation_timeout",
+              "browser_crash",
+              "file_not_found",
+              "invalid_format"
+            ],
+            "description": "Error classification (transient vs persistent)"
+          },
+          "error_message": {
+            "type": "string",
+            "description": "Human-readable error details"
+          },
+          "retry_attempt": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3,
+            "description": "Which retry attempt (0 = first occurrence, 1-3 = retry attempts)"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "action": { "const": "recovery_attempt" } }
+      },
+      "then": {
+        "required": ["recovery_action", "recovery_status"],
+        "properties": {
+          "recovery_action": {
+            "type": "string",
+            "enum": ["retry", "pause", "escalate"],
+            "description": "How error was handled"
+          },
+          "recovery_status": {
+            "type": "string",
+            "enum": ["recovering", "resolved", "escalated"],
+            "description": "Outcome of recovery attempt"
+          }
+        }
+      }
+    }
+  ],
+  "examples": [
+    {
+      "timestamp": "2026-02-15T14:30:00+05:00",
+      "agent": "accounting-sub-agent",
+      "action": "claim_file",
+      "file": "ACCOUNTING_INVOICE_001.md",
+      "status": "in_progress",
+      "metadata": { "partner": "Client ABC", "amount": 50000, "currency": "PKR" }
+    },
+    {
+      "timestamp": "2026-02-15T14:40:00+05:00",
+      "agent": "approval-sub-agent",
+      "action": "mcp_call",
+      "file": "ACCOUNTING_INVOICE_001.md",
+      "status": "completed",
+      "mcp": "odoo-mcp",
+      "method": "create_draft",
+      "params": { "partner_id": 123, "amount": 50000 },
+      "result": { "draft_id": 456, "preview_url": "http://localhost:8069/..." },
+      "metadata": {}
+    },
+    {
+      "timestamp": "2026-02-15T14:45:00+05:00",
+      "agent": "approval-sub-agent",
+      "action": "approval_granted",
+      "file": "ACCOUNTING_INVOICE_001.md",
+      "status": "approved",
+      "approver": "human",
+      "approval_time": "2026-02-15T14:42:00+05:00",
+      "metadata": {}
+    },
+    {
+      "timestamp": "2026-02-15T14:50:00+05:00",
+      "agent": "approval-sub-agent",
+      "action": "error",
+      "file": "ACCOUNTING_INVOICE_001.md",
+      "status": "error",
+      "error_type": "mcp_timeout",
+      "error_message": "Odoo MCP timeout after 30s on account.move.post",
+      "retry_attempt": 1,
+      "metadata": { "mcp": "odoo-mcp", "method": "post" }
+    },
+    {
+      "timestamp": "2026-02-15T14:51:00+05:00",
+      "agent": "approval-sub-agent",
+      "action": "recovery_attempt",
+      "file": "ACCOUNTING_INVOICE_001.md",
+      "status": "recovering",
+      "recovery_action": "retry",
+      "recovery_status": "resolved",
+      "metadata": { "retry_delay": "1min" }
+    }
+  ],
+  "prohibited_fields": {
+    "description": "NEVER log these fields (constitutional security requirement)",
+    "fields": ["password", "api_key", "token", "credential", "secret", "odoo_password", "oauth_token", "session_cookie"]
+  }
+}

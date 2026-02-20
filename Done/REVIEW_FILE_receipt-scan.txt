@@ -1,0 +1,38 @@
+[This is a placeholder for a PDF receipt scan]
+
+RESTAURANT RECEIPT
+==================
+
+Karachi Café
+123 Main Street, Karachi
+
+Date: 2026-02-14
+Time: 13:45
+
+Items:
+- Biryani x 2        PKR 800
+- Cold Drinks x 2    PKR 200
+- Tax (16%)          PKR 160
+--------------------------
+TOTAL:               PKR 1,160
+
+Payment: Cash
+
+Thank you for dining with us!
+
+---
+FILE ANALYSIS
+Category: receipt
+Processed: 2026-02-15
+---
+
+Summary: Restaurant receipt from Karachi Café dated Feb 14, 2026. Total PKR 1,160 for meal (biryani x2, drinks x2) paid in cash. Text file representation of receipt scan.
+
+Suggested Action: Archive for expense tracking. May require manual entry into accounting system.
+
+---
+NEEDS_HUMAN_REVIEW
+Reason: Financial document (receipt keyword detected)
+---
+
+Status: NEEDS_HUMAN_REVIEW

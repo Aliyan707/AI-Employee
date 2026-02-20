@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-employee.local/schemas/browser-mcp-api.json",
+  "title": "Browser MCP Server API (Extended)",
+  "description": "Extended browser-mcp for LinkedIn, Facebook, Instagram, Twitter/X social media posting",
+  "methods": {
+    "navigate": {
+      "description": "Navigate browser to URL",
+      "params": {
+        "type": "object",
+        "required": ["url"],
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "wait_for": { "type": "string", "description": "CSS selector to wait for after navigation" }
+        }
+      },
+      "result": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "final_url": { "type": "string" }
+        }
+      },
+      "approval_required": false
+    },
+    "fill": {
+      "description": "Fill form field with content",
+      "params": {
+        "type": "object",
+        "required": ["selector", "content"],
+        "properties": {
+          "selector": { "type": "string", "description": "CSS selector for input field" },
+          "content": { "type": "string", "description": "Content to fill" },
+          "clear_first": { "type": "boolean", "default": true }
+        }
+      },
+      "result": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" }
+        }
+      },
+      "approval_required": false
+    },
+    "click": {
+      "description": "Click element (button, link, etc.)",
+      "params": {
+        "type": "object",
+        "required": ["selector"],
+        "properties": {
+          "selector": { "type": "string", "description": "CSS selector for clickable element" },
+          "wait_after": { "type": "integer", "description": "Milliseconds to wait after click", "default": 1000 }
+        }
+      },
+      "result": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" }
+        }
+      },
+      "approval_required": "depends (approval required if clicking 'Post'/'Publish' button)"
+    },
+    "wait": {
+      "description": "Wait for condition or selector",
+      "params": {
+        "type": "object",
+        "properties": {
+          "selector": { "type": "string", "description": "CSS selector to wait for" },
+          "timeout": { "type": "integer", "default": 30000, "description": "Max wait time in milliseconds" }
+        }
+      },
+      "result": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "found": { "type": "boolean" }
+        }
+      },
+      "approval_required": false
+    },
+    "screenshot": {
+      "description": "Capture screenshot for debugging/logging",
+      "params": {
+        "type": "object",
+        "properties": {
+          "full_page": { "type": "boolean", "default": false }
+        }
+      },
+      "result": {
+        "type": "object",
+        "properties": {
+          "screenshot_base64": { "type": "string" }
+        }
+      },
+      "approval_required": false
+    }
+  },
+  "platform_configs": {
+    "linkedin": {
+      "post_url": "https://www.linkedin.com/",
+      "selectors": {
+        "start_post_button": "button.share-box-feed-entry__trigger",
+        "post_text_area": "div.ql-editor[contenteditable=true]",
+        "post_button": "button.share-actions__primary-action",
+        "post_confirmation": "div.share-box__success"
+      },
+      "workflow": ["navigate(post_url)", "wait(start_post_button)", "click(start_post_button)", "wait(post_text_area)", "fill(post_text_area, content)", "click(post_button)", "wait(post_confirmation)"]
+    },
+    "facebook": {
+      "post_url": "https://www.facebook.com/",
+      "selectors": {
+        "create_post_box": "div[aria-label='Create a post']",
+        "post_text_area": "div[contenteditable='true'][role='textbox']",
+        "post_button": "div[aria-label='Post']",
+        "post_confirmation": "div[role='dialog'][aria-label='Posted']"
+      },
+      "workflow": ["navigate(post_url)", "click(create_post_box)", "wait(post_text_area)", "fill(post_text_area, content)", "click(post_button)", "wait(post_confirmation)"]
+    },
+    "instagram": {
+      "post_url": "https://www.instagram.com/",
+      "selectors": {
+        "new_post_button": "svg[aria-label='New Post']",
+        "caption_text_area": "textarea[aria-label='Write a caption...']",
+        "share_button": "button:has-text('Share')",
+        "post_confirmation": "div:has-text('Your post has been shared')"
+      },
+      "workflow": ["navigate(post_url)", "click(new_post_button)", "wait(caption_text_area)", "fill(caption_text_area, content)", "click(share_button)", "wait(post_confirmation)"],
+      "notes": "Instagram requires image upload before caption - workflow simplified for text posts"
+    },
+    "x": {
+      "post_url": "https://twitter.com/compose/tweet",
+      "selectors": {
+        "tweet_text_area": "div[data-testid='tweetTextarea_0']",
+        "tweet_button": "div[data-testid='tweetButtonInline']",
+        "tweet_confirmation": "div[data-testid='toast']:has-text('Your post was sent')"
+      },
+      "workflow": ["navigate(post_url)", "wait(tweet_text_area)", "fill(tweet_text_area, content)", "click(tweet_button)", "wait(tweet_confirmation)"]
+    }
+  },
+  "approval_workflow": {
+    "posting_actions": {
+      "linkedin": "click(post_button) requires Approved/ file",
+      "facebook": "click(post_button) requires Approved/ file",
+      "instagram": "click(share_button) requires Approved/ file",
+      "x": "click(tweet_button) requires Approved/ file"
+    },
+    "approval_check": "Before clicking final publish button, MUST verify file exists in Approved/ with platform + content matching"
+  },
+  "error_codes": {
+    "SELECTOR_NOT_FOUND": "CSS selector not found (may need selector update - persistent)",
+    "NAVIGATION_TIMEOUT": "Page load timeout (transient - retry)",
+    "CLICK_FAILED": "Element not clickable (selector may be stale - persistent)",
+    "FILL_FAILED": "Cannot fill field (selector may be stale - persistent)",
+    "BROWSER_CRASH": "Browser process crashed (transient - retry with fresh browser)"
+  },
+  "retry_policy": {
+    "transient_errors": ["NAVIGATION_TIMEOUT", "BROWSER_CRASH"],
+    "retry_schedule": ["1min", "5min", "15min"],
+    "max_attempts": 3
+  }
+}

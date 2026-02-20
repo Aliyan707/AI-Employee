@@ -1,0 +1,23 @@
+# Odoo MCP Server - Python Dependencies
+# For Odoo Community 19+ JSON-RPC integration
+
+# Odoo RPC client library
+odoorpc>=0.9.0
+
+# MCP SDK (if available, otherwise use stdio directly)
+# anthropic-mcp>=0.1.0  # Uncomment when available
+
+# HTTP client
+requests>=2.31.0
+
+# Environment variable management
+python-dotenv>=1.0.0
+
+# JSON schema validation
+jsonschema>=4.17.0
+
+# Logging
+colorlog>=6.7.0
+
+# Type hints
+typing-extensions>=4.7.0

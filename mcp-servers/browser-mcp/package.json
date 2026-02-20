@@ -1,0 +1,31 @@
+{
+  "name": "browser-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for LinkedIn posting via Playwright browser automation",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "install-browsers": "playwright install chromium",
+    "test": "node test.js"
+  },
+  "keywords": [
+    "mcp",
+    "playwright",
+    "linkedin",
+    "browser-automation",
+    "ai-employee"
+  ],
+  "author": "Aliyan",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@playwright/browser-chromium": "^1.48.0",
+    "playwright": "^1.48.0",
+    "dotenv": "^16.4.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
