@@ -1,0 +1,16 @@
+{
+  "pythonVersion": "3.12",
+  "venvPath": ".",
+  "venv": ".venv",
+  "extraPaths": ["."],
+  "typeCheckingMode": "basic",
+  "reportMissingImports": "warning",
+  "reportMissingModuleSource": "warning",
+  "exclude": [
+    "frontend/**",
+    "k8s/**",
+    "specs/**",
+    "history/**",
+    ".specify/**"
+  ]
+}

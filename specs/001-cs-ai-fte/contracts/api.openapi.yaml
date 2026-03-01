@@ -1,0 +1,315 @@
+openapi: "3.1.0"
+info:
+  title: CS AI FTE — Internal REST API
+  version: "1.0.0"
+  description: >
+    FastAPI backend for the 24/7 Customer Success AI FTE.
+    Receives channel webhooks, exposes ticket/customer history,
+    and triggers reports.
+
+servers:
+  - url: http://localhost:8000
+    description: Local development
+  - url: https://api.cs-fte.internal
+    description: Production (internal cluster)
+
+paths:
+  # ── Channel Webhooks ──────────────────────────────────────────────────────
+  /webhooks/gmail:
+    post:
+      summary: Gmail push notification webhook
+      operationId: ingestGmail
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GmailWebhookPayload"
+      responses:
+        "200":
+          description: Message accepted and queued to cs.intake
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestAck"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /webhooks/whatsapp:
+    post:
+      summary: Twilio WhatsApp incoming message webhook
+      operationId: ingestWhatsapp
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/TwilioWhatsappPayload"
+      responses:
+        "200":
+          description: Message accepted and queued to cs.intake
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestAck"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /webhooks/webform:
+    post:
+      summary: Web support form submission
+      operationId: ingestWebform
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebformPayload"
+      responses:
+        "200":
+          description: Submission accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestAck"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  # ── Tickets ───────────────────────────────────────────────────────────────
+  /tickets/{ticket_id}:
+    get:
+      summary: Get full ticket with message history
+      operationId: getTicket
+      parameters:
+        - name: ticket_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Ticket details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Customers ─────────────────────────────────────────────────────────────
+  /customers/{customer_id}/history:
+    get:
+      summary: Full cross-channel customer history
+      operationId: getCustomerHistory
+      parameters:
+        - name: customer_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: channel
+          in: query
+          schema:
+            type: string
+            enum: [email, whatsapp, webform]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Customer and ticket history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerHistory"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Reports ───────────────────────────────────────────────────────────────
+  /reports/daily/{date}:
+    get:
+      summary: Retrieve daily report for a specific date
+      operationId: getDailyReport
+      parameters:
+        - name: date
+          in: path
+          required: true
+          schema:
+            type: string
+            format: date
+            example: "2026-03-01"
+      responses:
+        "200":
+          description: Daily report data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DailyReport"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /reports/daily/trigger:
+    post:
+      summary: Manually trigger daily report generation
+      operationId: triggerDailyReport
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+      responses:
+        "202":
+          description: Report generation queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id: { type: string }
+                  status: { type: string, example: "queued" }
+
+# ── Components ───────────────────────────────────────────────────────────────
+components:
+  schemas:
+    GmailWebhookPayload:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: object
+          properties:
+            data:    { type: string, description: "Base64-encoded Gmail message JSON" }
+            messageId: { type: string }
+        subscription: { type: string }
+
+    TwilioWhatsappPayload:
+      type: object
+      properties:
+        From:    { type: string, example: "whatsapp:+14155552671" }
+        To:      { type: string }
+        Body:    { type: string }
+        MessageSid: { type: string }
+
+    WebformPayload:
+      type: object
+      required: [email, message]
+      properties:
+        email:   { type: string, format: email }
+        name:    { type: string }
+        phone:   { type: string }
+        message: { type: string, minLength: 1 }
+        subject: { type: string }
+
+    IngestAck:
+      type: object
+      properties:
+        accepted:   { type: boolean }
+        kafka_offset: { type: integer }
+        idempotency_key: { type: string }
+
+    TicketDetail:
+      type: object
+      properties:
+        ticket_id:   { type: string, format: uuid }
+        customer_id: { type: string, format: uuid }
+        channel:     { type: string }
+        status:      { type: string }
+        priority:    { type: string }
+        subject:     { type: string }
+        escalated:   { type: boolean }
+        escalation_reason: { type: string }
+        created_at:  { type: string, format: date-time }
+        resolved_at: { type: string, format: date-time, nullable: true }
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              id:        { type: integer }
+              direction: { type: string, enum: [inbound, outbound] }
+              content:   { type: string }
+              sentiment: { type: number, nullable: true }
+              sent_at:   { type: string, format: date-time }
+
+    CustomerHistory:
+      type: object
+      properties:
+        customer:
+          type: object
+          properties:
+            id:            { type: string, format: uuid }
+            display_name:  { type: string }
+            company:       { type: string }
+            channels_used: { type: array, items: { type: string } }
+        tickets:
+          type: array
+          items:
+            type: object
+            properties:
+              ticket_id:     { type: string, format: uuid }
+              channel:       { type: string }
+              status:        { type: string }
+              subject:       { type: string }
+              created_at:    { type: string, format: date-time }
+        last_sentiment: { type: number, nullable: true }
+
+    DailyReport:
+      type: object
+      properties:
+        report_date:       { type: string, format: date }
+        total_tickets:     { type: integer }
+        tickets_by_channel:
+          type: object
+          additionalProperties: { type: integer }
+        top_topics:
+          type: array
+          items:
+            type: object
+            properties:
+              topic: { type: string }
+              count: { type: integer }
+        mean_sentiment:    { type: number, nullable: true }
+        escalation_count:  { type: integer }
+        escalation_rate:   { type: number, description: "Percentage 0–100" }
+        generated_at:      { type: string, format: date-time }
+
+    Error:
+      type: object
+      properties:
+        code:    { type: string }
+        message: { type: string }
+        detail:  { type: string }
+
+  responses:
+    BadRequest:
+      description: Invalid input
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Missing or invalid credentials
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ValidationError:
+      description: Request body validation failed
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }

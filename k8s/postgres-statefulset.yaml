@@ -1,0 +1,110 @@
+# NOTE: This PostgreSQL StatefulSet is for local/hackathon development only.
+# In production, use a managed database service:
+# - AWS RDS PostgreSQL
+# - Google Cloud SQL
+# - Azure Database for PostgreSQL
+# Replace this file with external DB connection configuration in production.
+
+---
+# Init ConfigMap to create the database if it doesn't exist
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: cs-fte
+data:
+  init.sql: |
+    CREATE DATABASE IF NOT EXISTS cs_fte;
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: cs-fte
+  labels:
+    app: cs-fte
+    component: postgres
+spec:
+  serviceName: postgres
+  replicas: 1  # Single node — replace with RDS/Cloud SQL in production
+  selector:
+    matchLabels:
+      app: cs-fte
+      component: postgres
+  template:
+    metadata:
+      labels:
+        app: cs-fte
+        component: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: pgvector/pgvector:pg16
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: cs-fte-config
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: cs-fte-config
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cs-fte-secrets
+                  key: POSTGRES_PASSWORD
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "cs_fte_user", "-d", "cs_fte"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "cs_fte_user", "-d", "cs_fte"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+
+---
+# Headless service for StatefulSet
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: cs-fte
+  labels:
+    app: cs-fte
+    component: postgres
+spec:
+  clusterIP: None
+  selector:
+    app: cs-fte
+    component: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres

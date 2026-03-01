@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cs-frontend
+  namespace: cs-fte
+  labels:
+    app: cs-fte
+    component: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cs-fte
+      component: frontend
+  template:
+    metadata:
+      labels:
+        app: cs-fte
+        component: frontend
+    spec:
+      containers:
+        - name: cs-frontend
+          image: cs-fte:frontend
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: NEXT_PUBLIC_API_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: cs-fte-config
+                  key: NEXT_PUBLIC_API_URL
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
