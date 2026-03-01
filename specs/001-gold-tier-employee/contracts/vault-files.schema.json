@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-employee.local/schemas/vault-file.json",
+  "title": "Vault File",
+  "description": "Work item file with YAML front-matter + Markdown body moving through vault states",
+  "type": "object",
+  "properties": {
+    "frontmatter": {
+      "type": "object",
+      "required": ["type", "id", "created", "status"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "ACCOUNTING_INVOICE",
+            "ACCOUNTING_PAYMENT",
+            "ACCOUNTING_JOURNAL",
+            "SOCIAL_linkedin",
+            "SOCIAL_facebook",
+            "SOCIAL_instagram",
+            "SOCIAL_x",
+            "EMAIL",
+            "WEEKLY_AUDIT_TRIGGER",
+            "PLAN"
+          ],
+          "description": "File type determines which sub-agent claims it"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_-]+$",
+          "description": "Unique identifier (numeric or UUID)"
+        },
+        "created": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp with PKT timezone (+05:00)"
+        },
+        "claimed_by": {
+          "type": ["string", "null"],
+          "enum": ["accounting-sub-agent", "social-media-sub-agent", "finance-auditor-sub-agent", "approval-sub-agent", null],
+          "description": "Agent that claimed this file (null if unclaimed)"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["needs_action", "in_progress", "pending_approval", "approved", "completed", "rejected", "error"],
+          "description": "Current workflow state"
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["high", "medium", "low"],
+          "default": "medium"
+        },
+        "partner": {
+          "type": "string",
+          "description": "Partner name (for ACCOUNTING_INVOICE, ACCOUNTING_PAYMENT)"
+        },
+        "amount": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Amount in PKR (for ACCOUNTING_*)"
+        },
+        "currency": {
+          "type": "string",
+          "enum": ["PKR"],
+          "default": "PKR",
+          "description": "Currency (PKR only in Gold-tier)"
+        },
+        "platform": {
+          "type": "string",
+          "enum": ["linkedin", "facebook", "instagram", "x"],
+          "description": "Social media platform (for SOCIAL_*)"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "type": { "pattern": "^ACCOUNTING_" } }
+          },
+          "then": {
+            "required": ["partner", "amount", "currency"]
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "pattern": "^SOCIAL_" } }
+          },
+          "then": {
+            "required": ["platform"]
+          }
+        }
+      ]
+    },
+    "body": {
+      "type": "string",
+      "description": "Markdown body with human-readable description and details"
+    }
+  },
+  "required": ["frontmatter", "body"],
+  "examples": [
+    {
+      "frontmatter": {
+        "type": "ACCOUNTING_INVOICE",
+        "id": "001",
+        "created": "2026-02-15T10:30:00+05:00",
+        "claimed_by": "accounting-sub-agent",
+        "status": "in_progress",
+        "priority": "high",
+        "partner": "Client ABC",
+        "amount": 50000,
+        "currency": "PKR"
+      },
+      "body": "# Invoice for Client ABC\n\n## Details\n\n- Service: Web development\n- Hours: 40\n- Rate: PKR 1,250/hour\n- Total: PKR 50,000\n- Due: 2026-03-01"
+    }
+  ]
+}
