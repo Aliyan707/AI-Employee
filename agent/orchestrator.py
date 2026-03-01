@@ -43,7 +43,10 @@ from config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
-openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
+openai_client = AsyncOpenAI(
+    api_key=settings.openai_api_key,
+    base_url=settings.openai_base_url or None,
+)
 
 # Circuit breaker: track consecutive failures per tool
 _circuit_breaker: dict[str, int] = {}
@@ -179,7 +182,7 @@ Important rules:
 - Do NOT include greetings or sign-offs (these are added separately){kb_context}"""
 
     response = await openai_client.chat.completions.create(
-        model="gpt-4o",
+        model=settings.openai_model,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": raw_message},

@@ -6,7 +6,7 @@ Provides a cached singleton via get_settings().
 """
 
 from functools import lru_cache
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -23,10 +23,19 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
+        populate_by_name=True,
     )
 
-    # --- OpenAI ---
-    openai_api_key: str = Field(..., description="OpenAI API key")
+    # --- OpenAI / xAI-compatible ---
+    openai_api_key: str = Field(..., description="OpenAI or xAI API key")
+    openai_base_url: Optional[str] = Field(
+        default=None,
+        description="Optional API base URL (e.g. https://api.x.ai/v1 for xAI/Grok)",
+    )
+    openai_model: str = Field(
+        default="gpt-4o",
+        description="LLM model name (e.g. gpt-4o, grok-2-1212)",
+    )
 
     # --- Gmail ---
     gmail_credentials_path: str = Field(
@@ -51,6 +60,11 @@ class Settings(BaseSettings):
     )
 
     # --- PostgreSQL ---
+    database_url_env: Optional[str] = Field(
+        default=None,
+        alias="DATABASE_URL",
+        description="Full async database URL (overrides postgres_* fields when set)",
+    )
     postgres_host: str = Field(default="localhost", description="PostgreSQL host")
     postgres_port: int = Field(default=5432, description="PostgreSQL port")
     postgres_db: str = Field(default="cs_fte", description="PostgreSQL database name")
@@ -95,7 +109,11 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
-        """Async PostgreSQL connection URL for SQLAlchemy."""
+        """Async PostgreSQL connection URL for SQLAlchemy.
+        Uses DATABASE_URL env var directly if set, otherwise builds from postgres_* fields.
+        """
+        if self.database_url_env:
+            return self.database_url_env
         return (
             f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"

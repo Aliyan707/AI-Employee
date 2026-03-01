@@ -17,7 +17,10 @@ from config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
-openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
+openai_client = AsyncOpenAI(
+    api_key=settings.openai_api_key,
+    base_url=settings.openai_base_url or None,
+)
 
 # Profanity keyword list for fast pre-check (before LLM call)
 PROFANITY_KEYWORDS = [
@@ -158,7 +161,7 @@ Customer message: "{text}"
 Sentiment score:"""
 
     response = await openai_client.chat.completions.create(
-        model="gpt-4o",
+        model=settings.openai_model,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.0,
         max_tokens=10,
