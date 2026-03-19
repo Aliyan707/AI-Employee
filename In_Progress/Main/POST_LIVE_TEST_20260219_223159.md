@@ -1,0 +1,91 @@
+---
+type: social_post
+platforms:
+  - linkedin
+  - facebook
+  - twitter
+urgency: normal
+category: service_promotion
+requires_approval: true
+created: 2026-02-19T22:31:59+05:00
+source: manual_test
+context: |
+  Gold-tier AI Employee live demonstration - Social Media Sub-Agent test
+  Testing autonomous social content generation with platform-specific optimization
+---
+
+# Social Media Post Request - Live Test
+
+## Content Brief
+**Topic:** Announcing our business automation consulting services
+
+**Key Message:**
+We help Karachi businesses automate their operations with AI-powered employee systems. From invoice processing to social media management, we deliver complete automation solutions that save time and reduce costs.
+
+**Target Audience:**
+- Small and medium businesses in Karachi
+- Business owners looking to scale operations
+- Companies struggling with manual administrative tasks
+
+**Call to Action:**
+Contact us for a free consultation on automating your business processes.
+
+**Tone:** Professional, helpful, solutions-focused
+
+**Hashtags to include:**
+- #KarachiBusinesses
+- #BusinessAutomation
+- #AIEmployee
+- #DigitalTransformation
+- #PakistanTech
+
+## Platform-Specific Requirements
+
+### LinkedIn
+- Professional tone
+- Focus on ROI and business impact
+- Include statistics: "Save 85% of admin time"
+- Length: 150-200 words
+- Add relevant industry hashtags
+
+### Facebook
+- Friendly, approachable tone
+- Use emojis sparingly
+- Shorter format (100-150 words)
+- Include call-to-action button suggestion
+
+### Twitter/X
+- Concise, punchy (max 280 characters)
+- Thread format (3-4 tweets) acceptable
+- Strong opening hook
+- Clear value proposition
+
+## Additional Context
+- Business location: Karachi, Pakistan
+- Services: Odoo ERP integration, social media automation, invoice processing, email management
+- Unique selling point: Complete autonomous AI employee system, not just tools
+- Pricing model: Monthly subscription starting at PKR 50,000
+
+## Success Criteria
+- Platform-appropriate formatting
+- Engaging opening hook
+- Clear value proposition
+- Strong call-to-action
+- Karachi-specific hashtags included
+- Professional brand voice maintained
+
+---
+
+**INSTRUCTIONS FOR AGENT:**
+1. Claim this file (move to In_Progress/Social/)
+2. Invoke `/multi-social-poster` skill
+3. Generate platform-specific content
+4. Draft approval files in Pending_Approval/Social/
+5. Log actions to Logs/social_YYYYMMDD.jsonl
+6. Wait for human approval before posting
+
+**Expected Timeline:**
+- Content generation: 30-90 seconds
+- Approval request: immediate after generation
+- Human approval: manual step
+- Posting execution: 10-30 seconds after approval

@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(py -c:*)",
+      "Bash(pm2 delete:*)",
+      "Bash(TZ='Asia/Karachi' date:*)",
+      "Bash(python post_now.py:*)",
+      "Bash(python:*)",
+      "Bash(git push:*)"
+    ]
+  }
+}
