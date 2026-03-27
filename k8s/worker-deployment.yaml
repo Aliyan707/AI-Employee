@@ -1,0 +1,119 @@
+# Three separate Deployments for the three worker types.
+# Each runs the same Docker image with a different CMD.
+
+---
+# Intake Worker: consumes cs.intake, runs pipeline
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cs-intake-worker
+  namespace: cs-fte
+  labels:
+    app: cs-fte
+    component: intake-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cs-fte
+      component: intake-worker
+  template:
+    metadata:
+      labels:
+        app: cs-fte
+        component: intake-worker
+    spec:
+      containers:
+        - name: cs-intake-worker
+          image: cs-fte:api
+          command: ["python", "-m", "workers.intake_worker"]
+          envFrom:
+            - configMapRef:
+                name: cs-fte-config
+            - secretRef:
+                name: cs-fte-secrets
+          resources:
+            requests:
+              cpu: "125m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+
+---
+# Response Worker: consumes cs.response, routes to channel senders
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cs-response-worker
+  namespace: cs-fte
+  labels:
+    app: cs-fte
+    component: response-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cs-fte
+      component: response-worker
+  template:
+    metadata:
+      labels:
+        app: cs-fte
+        component: response-worker
+    spec:
+      containers:
+        - name: cs-response-worker
+          image: cs-fte:api
+          command: ["python", "-m", "workers.response_worker"]
+          envFrom:
+            - configMapRef:
+                name: cs-fte-config
+            - secretRef:
+                name: cs-fte-secrets
+          resources:
+            requests:
+              cpu: "125m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+
+---
+# Metrics Worker: consumes cs.metrics, batch-inserts to DB
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cs-metrics-worker
+  namespace: cs-fte
+  labels:
+    app: cs-fte
+    component: metrics-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cs-fte
+      component: metrics-worker
+  template:
+    metadata:
+      labels:
+        app: cs-fte
+        component: metrics-worker
+    spec:
+      containers:
+        - name: cs-metrics-worker
+          image: cs-fte:api
+          command: ["python", "-m", "workers.metrics_worker"]
+          envFrom:
+            - configMapRef:
+                name: cs-fte-config
+            - secretRef:
+                name: cs-fte-secrets
+          resources:
+            requests:
+              cpu: "125m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"

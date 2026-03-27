@@ -1,0 +1,936 @@
+# =============================================================================
+# CS FTE Agent — Skills Manifest
+# Project : CRM Digital FTE Hackathon
+# Phase   : Incubation → Specialization
+# Version : 1.0.0  |  Date: 2026-03-01
+# =============================================================================
+#
+# USAGE GUIDE
+# -----------
+# Each skill entry is a self-contained capability the main orchestrator can
+# invoke.  Fields:
+#   name               Unique identifier used in code (snake_case)
+#   display_name       Human-readable label
+#   description        What the skill does and why it exists
+#   when_to_use        Precise invocation trigger (orchestrator decision rule)
+#   phase              incubation | specialization | both
+#   latency_budget_ms  Maximum allowed execution time
+#   inputs             List of typed input parameters
+#   outputs            List of typed output fields
+#   error_handling     What to return / do on failure
+#   channel_tweaks     Channel-specific behaviour adjustments
+#   postgresql         Tables read/written and SQL hints
+#   incubation_impl    MCP async function stub reference
+#   specialization_impl OpenAI Agents SDK @function_tool reference
+#   example_usage      Concrete call + expected response
+# =============================================================================
+
+skills:
+
+  # ---------------------------------------------------------------------------
+  # SKILL 1 — Knowledge Retrieval
+  # ---------------------------------------------------------------------------
+  - name: knowledge_retrieval
+    display_name: "Knowledge Retrieval"
+    version: "1.0.0"
+    description: >
+      Performs semantic vector search over the product documentation corpus and
+      returns ranked, relevance-scored snippets.  The main agent uses these
+      snippets as the factual grounding for every customer response.  Zero
+      hallucination tolerance — if no confident match is found the skill
+      returns an explicit fallback signal so the orchestrator can escalate
+      rather than fabricate an answer.
+    when_to_use: >
+      Invoke IMMEDIATELY after ticket creation and customer-history retrieval,
+      on every inbound message that contains a product question, how-to
+      request, troubleshooting query, or feature inquiry.  Skip only when
+      escalation has already been decided by a hard rule (e.g. legal language).
+    phase: both
+    latency_budget_ms: 1200
+
+    inputs:
+      - name: query
+        type: string
+        required: true
+        description: "Customer question or topic extracted verbatim from raw_message."
+      - name: channel
+        type: "enum[email, whatsapp, web_form, web_chat, slack]"
+        required: true
+        description: "Active communication channel — controls snippet length."
+      - name: top_k
+        type: integer
+        required: false
+        default: 3
+        description: "Maximum number of results to return."
+      - name: min_relevance_score
+        type: float
+        required: false
+        default: 0.65
+        description: "Minimum cosine-similarity threshold (0.0–1.0)."
+      - name: customer_tier
+        type: "enum[free, pro, enterprise]"
+        required: true
+        description: "Determines which documentation tiers are accessible."
+      - name: customer_id
+        type: "uuid"
+        required: true
+        description: "PostgreSQL CRM customer UUID for logging."
+      - name: session_id
+        type: string
+        required: true
+        description: "Session/conversation identifier for log correlation."
+
+    outputs:
+      - name: results
+        type: "array[KnowledgeResult]"
+        description: >
+          Ranked list of matching documentation snippets.  Each item contains:
+          doc_id (uuid), title (string), snippet (string), relevance_score (float),
+          doc_url (string), last_updated (ISO8601), tier_required (string).
+      - name: result_count
+        type: integer
+        description: "Number of results returned (0 = no confident match found)."
+      - name: query_used
+        type: string
+        description: "The exact query string that was searched."
+      - name: search_strategy
+        type: "enum[vector, keyword, hybrid]"
+        description: "Search method applied."
+      - name: fallback_suggestion
+        type: "string|null"
+        description: "Escalation hint populated when result_count == 0."
+      - name: retrieved_at
+        type: "ISO8601"
+        description: "UTC timestamp of retrieval."
+
+    error_handling:
+      on_timeout:
+        action: "return partial results collected before timeout"
+        fallback_suggestion: "Knowledge base search timed out. Consider escalating."
+      on_db_error:
+        action: "return error JSON with result_count: 0"
+        log_level: "ERROR"
+        persist_to: "agent_performance_logs"
+      on_zero_results:
+        action: "return results: [], populate fallback_suggestion"
+        orchestrator_hint: "Escalate or acknowledge knowledge gap honestly."
+      never_do:
+        - "Fabricate documentation content"
+        - "Return docs for tiers above customer_tier"
+
+    channel_tweaks:
+      whatsapp:
+        max_snippet_chars: 200
+        top_k_override: 1
+        description: "Single most relevant result, 200-char snippet only."
+      email:
+        max_snippet_chars: 500
+        top_k_override: 3
+      web_form:
+        max_snippet_chars: 400
+        top_k_override: 2
+      web_chat:
+        max_snippet_chars: 500
+        top_k_override: 3
+      slack:
+        max_snippet_chars: 300
+        top_k_override: 2
+
+    postgresql:
+      reads:
+        - table: product_docs_embeddings
+          hint: "Cosine similarity via pgvector: 1 - (embedding <=> $query_vec::vector)"
+        - table: customers
+          hint: "Resolve tier from customer_id"
+      writes:
+        - table: knowledge_retrieval_logs
+          fields: [customer_id, session_id, query_text, result_count, top_score,
+                   search_strategy, retrieved_at]
+          on_conflict: "INSERT always (audit log, never update)"
+
+    incubation_impl: "skills/skills_impl.py::retrieve_knowledge_mcp"
+    specialization_impl: "skills/skills_impl.py::retrieve_knowledge"
+
+    example_usage:
+      input:
+        query: "How do I configure SSO with SAML 2.0?"
+        channel: "web_chat"
+        top_k: 3
+        min_relevance_score: 0.65
+        customer_tier: "enterprise"
+        customer_id: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+        session_id: "sess_abc123"
+      output:
+        results:
+          - doc_id: "d1e2f3a4-0000-0000-0000-000000000001"
+            title: "Enterprise SSO Configuration Guide"
+            snippet: "To enable SAML 2.0 SSO, navigate to Admin → Security → SSO and upload your IdP metadata XML..."
+            relevance_score: 0.94
+            doc_url: "/docs/enterprise/sso-saml"
+            last_updated: "2025-11-15T09:00:00Z"
+            tier_required: "enterprise"
+        result_count: 1
+        query_used: "How do I configure SSO with SAML 2.0?"
+        search_strategy: "vector"
+        fallback_suggestion: null
+        retrieved_at: "2026-03-01T14:32:00Z"
+
+  # ---------------------------------------------------------------------------
+  # SKILL 2 — Sentiment Analysis
+  # ---------------------------------------------------------------------------
+  - name: sentiment_analysis
+    display_name: "Sentiment Analysis"
+    version: "1.0.0"
+    description: >
+      Quantifies the emotional state of a customer message and conversation
+      history, detecting anger, urgency, legal language, profanity, and
+      explicit human-agent requests.  Produces a 0.0–1.0 sentiment score,
+      directional trend, and boolean signal flags that feed directly into
+      the Escalation Decision Skill.  Uses channel-aware history windowing
+      to focus analysis on contextually relevant messages.
+    when_to_use: >
+      Invoke on EVERY inbound customer message, without exception, before
+      any other processing step that depends on emotional context (escalation
+      decision, response tone selection).  Run in parallel with knowledge
+      retrieval when latency is critical.
+    phase: both
+    latency_budget_ms: 800
+
+    inputs:
+      - name: message_text
+        type: string
+        required: true
+        description: "The current raw customer message text."
+      - name: channel
+        type: "enum[email, whatsapp, web_form, web_chat, slack]"
+        required: true
+        description: "Controls history window size used for trend analysis."
+      - name: conversation_history
+        type: "array[{role: enum[customer,agent], text: string, timestamp: ISO8601}]"
+        required: true
+        description: "Full conversation history; will be windowed per channel rules."
+      - name: customer_id
+        type: uuid
+        required: true
+        description: "CRM customer UUID for persistence and correlation."
+      - name: session_id
+        type: string
+        required: true
+        description: "Session identifier for log correlation."
+
+    outputs:
+      - name: sentiment_score
+        type: float
+        range: "0.0 (very negative) — 1.0 (very positive)"
+        description: "Normalised sentiment score for the current message."
+      - name: sentiment_label
+        type: "enum[very_negative, negative, neutral, positive, very_positive]"
+      - name: anger_detected
+        type: boolean
+        description: "True if score < 0.35 OR profanity/threat language present."
+      - name: profanity_detected
+        type: boolean
+      - name: urgency_detected
+        type: boolean
+        description: "True when time-pressure language is present."
+      - name: legal_language_detected
+        type: boolean
+        description: "True when lawsuit, GDPR, chargeback, or legal keywords found."
+      - name: human_request_detected
+        type: boolean
+        description: "True when customer explicitly asks for a human agent."
+      - name: trend
+        type: "enum[improving, stable, declining]"
+        description: "Direction of sentiment across the conversation history window."
+      - name: history_average_score
+        type: float
+        description: "Rolling average of windowed history message scores."
+      - name: confidence
+        type: "enum[high, medium, low]"
+        description: "low when message < 5 words; high when clear signal present."
+      - name: reasoning
+        type: string
+        description: "Internal note for orchestrator only — never shown to customer."
+      - name: processed_at
+        type: ISO8601
+
+    error_handling:
+      on_ambiguous_message:
+        action: "return score: 0.5, confidence: low"
+        note: "Never fabricate sentiment; ambiguity defaults to neutral."
+      on_timeout:
+        action: "return last known score with confidence: low"
+        log_level: "WARN"
+      on_short_message:
+        condition: "len(message_text.split()) < 5"
+        action: "return confidence: low"
+      must_return_valid_json: true
+      include_error_field_on_failure: true
+
+    channel_tweaks:
+      whatsapp:
+        history_window: 5
+        note: "Short context; focus on current message anger/urgency signals."
+      web_chat:
+        history_window: 15
+      email:
+        history_window: null
+        note: "Full thread; long-form content; tone analysis weighted more."
+      slack:
+        history_window: 10
+
+    postgresql:
+      reads:
+        - table: messages
+          hint: "Optionally load prior session messages for trend baseline."
+      writes:
+        - table: sentiment_events
+          fields: [customer_id, session_id, sentiment_score, anger_detected,
+                   legal_detected, human_request, trend, confidence, processed_at]
+        - table: messages
+          fields: [sentiment_score]
+          hint: "UPDATE messages SET sentiment_score = $1 WHERE id = $2"
+
+    incubation_impl: "skills/skills_impl.py::analyze_sentiment_mcp"
+    specialization_impl: "skills/skills_impl.py::analyze_sentiment"
+
+    example_usage:
+      input:
+        message_text: "I have been waiting 3 days and nobody helped me!! I want a refund NOW!"
+        channel: "whatsapp"
+        conversation_history:
+          - role: "customer"
+            text: "Hello, I have a problem with my account"
+            timestamp: "2026-03-01T10:00:00Z"
+          - role: "agent"
+            text: "Hi! I'm looking into that for you."
+            timestamp: "2026-03-01T10:00:30Z"
+        customer_id: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+        session_id: "sess_abc123"
+      output:
+        sentiment_score: 0.08
+        sentiment_label: "very_negative"
+        anger_detected: true
+        profanity_detected: false
+        urgency_detected: true
+        legal_language_detected: false
+        human_request_detected: false
+        trend: "declining"
+        history_average_score: 0.54
+        confidence: "high"
+        reasoning: "Extreme urgency language ('3 days', 'NOW'), anger signals, refund keyword detected."
+        processed_at: "2026-03-01T14:32:01Z"
+
+  # ---------------------------------------------------------------------------
+  # SKILL 3 — Escalation Decision
+  # ---------------------------------------------------------------------------
+  - name: escalation_decision
+    display_name: "Escalation Decision"
+    version: "1.0.0"
+    description: >
+      Evaluates the full conversation state against a two-phase rule engine:
+      deterministic hard rules (always escalate, no override) followed by
+      weighted soft rules (escalate when 2+ triggered).  Returns a binary
+      escalation decision, urgency level, recommended team routing, and a
+      pre-drafted channel-appropriate handoff message.
+    when_to_use: >
+      Invoke AFTER sentiment analysis and knowledge retrieval are complete,
+      before response generation begins.  Also re-invoke mid-conversation
+      if sentiment_score drops below 0.3 during an ongoing exchange.
+    phase: both
+    latency_budget_ms: 600
+
+    inputs:
+      - name: current_message
+        type: string
+        required: true
+      - name: channel
+        type: "enum[email, whatsapp, web_form, web_chat, slack]"
+        required: true
+      - name: sentiment_report
+        type: object
+        required: true
+        description: >
+          Full output object from sentiment_analysis skill (sentiment_score,
+          anger_detected, legal_language_detected, human_request_detected, trend).
+      - name: conversation_history
+        type: "array[{role: string, text: string, timestamp: ISO8601}]"
+        required: true
+      - name: knowledge_retrieval_failed
+        type: boolean
+        required: false
+        default: false
+        description: "True when knowledge_retrieval returned result_count == 0."
+      - name: customer_tier
+        type: "enum[free, pro, enterprise]"
+        required: true
+      - name: customer_id
+        type: uuid
+        required: true
+      - name: session_id
+        type: string
+        required: true
+      - name: escalation_count_today
+        type: integer
+        required: false
+        default: 0
+        description: "Number of escalations already raised in this session."
+
+    outputs:
+      - name: escalate
+        type: boolean
+        description: "Primary decision: true = escalate to human."
+      - name: escalation_type
+        type: "enum[immediate, suggested, none]"
+        description: "immediate = hard rule; suggested = soft rules; none = no escalation."
+      - name: primary_reason
+        type: string
+        description: "Dominant reason code: explicit_human_request | legal_language_detected | pricing_negotiation | threat_or_abuse | low_sentiment_score | declining_trend | knowledge_failure | enterprise_priority | extended_conversation."
+      - name: reason_codes
+        type: "array[string]"
+        description: "All triggered rule codes."
+      - name: confidence
+        type: "enum[high, medium, low]"
+      - name: hard_rule_triggered
+        type: boolean
+      - name: soft_rules_triggered
+        type: "array[string]"
+      - name: recommended_team
+        type: "string|null"
+        description: "CRM routing target: billing | legal | senior_support | retention | null."
+      - name: urgency
+        type: "enum[critical, high, medium, low]"
+      - name: reasoning
+        type: string
+        description: "Internal explanation for orchestrator — never shown to customer."
+      - name: suggested_handoff_message
+        type: "string|null"
+        description: "Pre-drafted channel-appropriate message the orchestrator sends when escalating."
+      - name: decided_at
+        type: ISO8601
+
+    error_handling:
+      on_missing_sentiment:
+        action: "apply conservative default: escalate=true, reason: missing_sentiment_data"
+      on_unknown_channel:
+        action: "treat as web_chat for handoff preference; log warning"
+      hard_rules_never_overridden: true
+      must_return_valid_json: true
+
+    channel_tweaks:
+      whatsapp:
+        handoff_preference: async
+        handoff_message_max_chars: 160
+      email:
+        handoff_preference: async
+      web_chat:
+        handoff_preference: live_transfer
+      slack:
+        handoff_preference: live_transfer
+      web_form:
+        handoff_preference: async
+
+    postgresql:
+      writes:
+        - table: escalation_decisions
+          fields: [customer_id, session_id, escalate, escalation_type,
+                   primary_reason, recommended_team, urgency, hard_rule_triggered,
+                   decided_at]
+        - table: tickets
+          hint: "UPDATE tickets SET status='ESCALATED' WHERE id=$ticket_id IF escalate=true"
+
+    incubation_impl: "skills/skills_impl.py::decide_escalation_mcp"
+    specialization_impl: "skills/skills_impl.py::decide_escalation"
+
+    example_usage:
+      input:
+        current_message: "This is completely unacceptable. I need to speak to your legal team."
+        channel: "email"
+        sentiment_report:
+          sentiment_score: 0.1
+          anger_detected: true
+          legal_language_detected: true
+          human_request_detected: false
+          trend: "declining"
+        conversation_history: []
+        knowledge_retrieval_failed: false
+        customer_tier: "enterprise"
+        customer_id: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+        session_id: "sess_abc123"
+        escalation_count_today: 0
+      output:
+        escalate: true
+        escalation_type: "immediate"
+        primary_reason: "legal_language_detected"
+        reason_codes: ["legal_language_detected", "low_sentiment_score"]
+        confidence: "high"
+        hard_rule_triggered: true
+        soft_rules_triggered: ["low_sentiment_score"]
+        recommended_team: "legal"
+        urgency: "critical"
+        reasoning: "Hard rule triggered: legal_language_detected. Immediate escalation required. Additional soft flag: low_sentiment_score=0.1."
+        suggested_handoff_message: "This matter requires specialist attention. Connecting you to our team now. We will follow up within 2 business hours (Ticket #{{ticket_id}})."
+        decided_at: "2026-03-01T14:32:02Z"
+
+  # ---------------------------------------------------------------------------
+  # SKILL 4 — Channel Adaptation
+  # ---------------------------------------------------------------------------
+  - name: channel_adaptation
+    display_name: "Channel Adaptation"
+    version: "1.0.0"
+    description: >
+      Transforms a canonical (channel-neutral) response draft into the
+      correct format, length, tone, and structural conventions for the target
+      channel.  Handles WhatsApp chunking (160-char parts), email HTML
+      structure, web-form bullet points, and Slack markdown.  Ensures no
+      response ever violates channel hard limits before dispatch.
+    when_to_use: >
+      Invoke AFTER response generation (Step 6 of the orchestrator workflow)
+      and BEFORE send_response.  Must run on every outbound message, including
+      escalation acknowledgments.
+    phase: both
+    latency_budget_ms: 400
+
+    inputs:
+      - name: response_text
+        type: string
+        required: true
+        description: "The fully composed, channel-neutral response draft."
+      - name: channel
+        type: "enum[email, whatsapp, web_form, web_chat, slack]"
+        required: true
+      - name: customer_name
+        type: "string|null"
+        required: false
+        description: "Customer first name for personalised salutation injection."
+      - name: ticket_id
+        type: string
+        required: true
+        description: "Ticket reference appended per channel convention."
+      - name: tone_override
+        type: "enum[formal, conversational, empathetic]|null"
+        required: false
+        description: "Force a specific tone when orchestrator detects special context."
+      - name: is_escalation_message
+        type: boolean
+        required: false
+        default: false
+        description: "Adjusts template for handoff acknowledgment messages."
+
+    outputs:
+      - name: formatted_response
+        type: string
+        description: "Final channel-compliant response ready for dispatch."
+      - name: message_parts
+        type: "array[string]"
+        description: "For WhatsApp multi-part messages (e.g. ['1/3: ...', '2/3: ...']). Single-element for other channels."
+      - name: truncated
+        type: boolean
+        description: "True if content was shortened to meet channel limits."
+      - name: word_count
+        type: integer
+      - name: char_count
+        type: integer
+      - name: channel_compliant
+        type: boolean
+        description: "Validation flag: false if limits could not be met."
+      - name: adapted_at
+        type: ISO8601
+
+    error_handling:
+      on_over_limit:
+        action: "truncate to channel limit, set truncated: true, log warning"
+        note: "Truncation prefers cutting from middle; always preserve greeting and ticket reference."
+      on_unknown_channel:
+        action: "apply web_form defaults"
+      on_missing_ticket_id:
+        action: "append 'Reference: N/A' and log warning"
+
+    channel_tweaks:
+      email:
+        max_words: 500
+        salutation: "Dear {{customer_name}},"
+        closing: "Best regards,\nCustomer Success Team\nReference: Ticket #{{ticket_id}}"
+        format: "plain_text_or_light_html"
+        emoji_allowed: false
+      whatsapp:
+        max_chars_per_part: 160
+        max_parts: 5
+        emoji_allowed: true
+        max_emoji: 2
+        note: "Split at sentence boundaries; number parts as '1/N: ...' prefix."
+      web_form:
+        max_words: 300
+        closing: "\nTicket Reference: #{{ticket_id}}"
+        bullet_points_allowed: true
+        emoji_allowed: false
+      web_chat:
+        max_words: 400
+        format: "plain_text"
+        emoji_allowed: true
+      slack:
+        max_chars: 3000
+        format: "slack_markdown"
+        code_blocks_allowed: true
+        emoji_allowed: true
+
+    postgresql:
+      reads: []
+      writes:
+        - table: messages
+          fields: [content, direction, sent_at]
+          hint: "Log final formatted_response as outbound message record."
+
+    incubation_impl: "skills/skills_impl.py::adapt_for_channel_mcp"
+    specialization_impl: "skills/skills_impl.py::adapt_for_channel"
+
+    example_usage:
+      input:
+        response_text: "Thank you for reaching out about SSO configuration. To set up SAML 2.0 SSO for your enterprise account, please navigate to Admin Settings, then Security, and select SSO Configuration. Upload your Identity Provider metadata XML file. If you experience any issues contact your IdP vendor first."
+        channel: "whatsapp"
+        customer_name: "Maria"
+        ticket_id: "TKT-00042"
+        tone_override: null
+        is_escalation_message: false
+      output:
+        formatted_response: "1/2: Hi Maria! For SAML 2.0 SSO: go to Admin → Security → SSO Config, upload IdP XML 🔧"
+        message_parts:
+          - "1/2: Hi Maria! For SAML 2.0 SSO: go to Admin → Security → SSO Config, upload IdP XML 🔧"
+          - "2/2: Still having trouble? Your IdP vendor can help. Ref: TKT-00042 ✅"
+        truncated: false
+        word_count: 26
+        char_count: 158
+        channel_compliant: true
+        adapted_at: "2026-03-01T14:32:03Z"
+
+  # ---------------------------------------------------------------------------
+  # SKILL 5 — Customer Identification
+  # ---------------------------------------------------------------------------
+  - name: customer_identification
+    display_name: "Customer Identification"
+    version: "1.0.0"
+    description: >
+      Resolves an incoming message sender (identified by email, phone, or
+      session token) to a unified CRM customer record.  Performs deduplication
+      across channels (a customer who emails and WhatsApps gets one merged
+      profile), creates new records for first-time contacts, and returns
+      the full interaction history summary for context injection.
+    when_to_use: >
+      Invoke as the VERY FIRST operation upon receiving an inbound message,
+      before ticket creation.  The customer_id returned is required by every
+      subsequent skill and tool in the workflow.
+    phase: both
+    latency_budget_ms: 500
+
+    inputs:
+      - name: email
+        type: "string|null"
+        required: false
+        description: "Customer email address from channel metadata."
+      - name: phone
+        type: "string|null"
+        required: false
+        description: "Customer phone/WhatsApp number in E.164 format."
+      - name: session_id
+        type: string
+        required: true
+        description: "Current session identifier."
+      - name: channel
+        type: "enum[email, whatsapp, web_form, web_chat, slack]"
+        required: true
+      - name: raw_name
+        type: "string|null"
+        required: false
+        description: "Name as provided by channel (may be display name)."
+
+    outputs:
+      - name: customer_id
+        type: uuid
+        description: "Canonical CRM customer UUID (existing or newly created)."
+      - name: is_new_customer
+        type: boolean
+        description: "True if a new CRM record was created."
+      - name: customer_name
+        type: "string|null"
+        description: "Resolved full name from CRM record."
+      - name: customer_tier
+        type: "enum[free, pro, enterprise]"
+        description: "Subscription tier — needed by knowledge retrieval."
+      - name: merged_history
+        type: object
+        description: >
+          Condensed interaction history:
+            prior_ticket_count (int),
+            unresolved_tickets (int),
+            last_interaction_channel (string),
+            last_interaction_at (ISO8601),
+            known_issues (array[string]),
+            open_ticket_ids (array[string]).
+      - name: identity_confidence
+        type: "enum[exact_match, fuzzy_match, new_record]"
+        description: "How the resolution was achieved."
+      - name: resolved_at
+        type: ISO8601
+
+    error_handling:
+      on_no_identifiers:
+        action: "create anonymous session record; set identity_confidence: new_record"
+        note: "Do not block pipeline; log warning for ops review."
+      on_duplicate_found:
+        action: "merge records using most recent email as canonical; log audit event"
+      on_db_error:
+        action: "return ephemeral in-memory customer_id; set identity_confidence: new_record"
+        log_level: "ERROR"
+
+    channel_tweaks:
+      email:
+        primary_identifier: email
+        note: "Email header From: is authoritative identifier."
+      whatsapp:
+        primary_identifier: phone
+        note: "Phone in E.164 format from WhatsApp Business API webhook."
+      web_form:
+        primary_identifier: email
+        note: "Form submission email field."
+      web_chat:
+        primary_identifier: session_id
+        note: "Anonymous until auth; match on cookie/session token."
+      slack:
+        primary_identifier: email
+        note: "Slack user profile email via Workspace API."
+
+    postgresql:
+      reads:
+        - table: customers
+          hint: "SELECT * FROM customers WHERE email=$1 OR phone=$2 LIMIT 1"
+        - table: tickets
+          hint: "COUNT unresolved; list open ticket IDs per customer"
+        - table: conversations
+          hint: "Latest channel and timestamp per customer"
+      writes:
+        - table: customers
+          hint: "INSERT if is_new_customer; UPDATE last_seen_at always"
+          fields: [name, email, phone, tier, created_at, last_seen_at]
+        - table: customer_identity_log
+          fields: [customer_id, session_id, channel, identity_confidence, resolved_at]
+          hint: "Audit trail for identity resolution events."
+
+    incubation_impl: "skills/skills_impl.py::identify_customer_mcp"
+    specialization_impl: "skills/skills_impl.py::identify_customer"
+
+    example_usage:
+      input:
+        email: "maria.santos@example.com"
+        phone: null
+        session_id: "sess_abc123"
+        channel: "email"
+        raw_name: "Maria Santos"
+      output:
+        customer_id: "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+        is_new_customer: false
+        customer_name: "Maria Santos"
+        customer_tier: "enterprise"
+        merged_history:
+          prior_ticket_count: 4
+          unresolved_tickets: 1
+          last_interaction_channel: "whatsapp"
+          last_interaction_at: "2026-02-15T09:12:00Z"
+          known_issues: ["SSO login intermittent failure"]
+          open_ticket_ids: ["TKT-00039"]
+        identity_confidence: "exact_match"
+        resolved_at: "2026-03-01T14:32:00Z"
+
+  # ---------------------------------------------------------------------------
+  # SKILL 6 (BONUS) — Reporting
+  # ---------------------------------------------------------------------------
+  - name: reporting
+    display_name: "Daily Sentiment & Ticket Report"
+    version: "1.0.0"
+    description: >
+      Generates structured daily operational reports aggregated from the
+      PostgreSQL CRM tables.  Covers ticket volume, resolution rates,
+      escalation rates, sentiment trends by channel and tier, top knowledge
+      gap topics, and agent performance metrics.  Designed to be triggered
+      on a daily schedule (e.g. cron at 07:00 UTC) or on-demand by ops staff.
+    when_to_use: >
+      Invoke on scheduled trigger (daily at 07:00 UTC) OR when an ops team
+      member requests a status report.  Not part of the real-time customer
+      interaction workflow.
+    phase: both
+    latency_budget_ms: 5000
+
+    inputs:
+      - name: report_date
+        type: "ISO8601 date (YYYY-MM-DD)"
+        required: true
+        description: "The calendar date to aggregate data for."
+      - name: channel_filter
+        type: "enum[email, whatsapp, web_form, web_chat, slack, all]|null"
+        required: false
+        default: "all"
+        description: "Limit report to a specific channel."
+      - name: include_sections
+        type: "array[enum[ticket_summary, sentiment_trends, escalation_breakdown, kb_gaps, agent_performance, customer_tier_breakdown]]"
+        required: false
+        default: ["ticket_summary", "sentiment_trends", "escalation_breakdown"]
+        description: "Select report sections to generate."
+      - name: output_format
+        type: "enum[json, markdown, html]"
+        required: false
+        default: "json"
+
+    outputs:
+      - name: report_date
+        type: "ISO8601 date"
+      - name: generated_at
+        type: ISO8601
+      - name: ticket_summary
+        type: object
+        description: >
+          total_tickets (int), resolved (int), escalated (int),
+          open (int), resolution_rate (float), avg_resolution_time_mins (float).
+      - name: sentiment_trends
+        type: object
+        description: >
+          avg_score_overall (float), avg_score_by_channel (map[channel, float]),
+          anger_event_count (int), trend_direction (enum[improving, stable, declining]).
+      - name: escalation_breakdown
+        type: object
+        description: >
+          total_escalations (int), by_reason (map[reason_code, int]),
+          by_channel (map[channel, int]), by_tier (map[tier, int]),
+          escalation_rate_pct (float).
+      - name: kb_gaps
+        type: object
+        description: >
+          zero_result_queries (int), top_unanswered_topics (array[string]),
+          low_confidence_docs (array[{doc_id, title, avg_score}]).
+      - name: agent_performance
+        type: object
+        description: >
+          avg_response_latency_ms (float), skill_error_rate (float),
+          slowest_skill (string), p95_latency_ms (float).
+      - name: customer_tier_breakdown
+        type: object
+        description: "Ticket and escalation counts segmented by free/pro/enterprise."
+      - name: formatted_output
+        type: string
+        description: "Markdown or HTML rendering if output_format != json."
+
+    error_handling:
+      on_no_data:
+        action: "return empty report with zero counts and note: 'No data for this date.'"
+      on_db_error:
+        action: "return partial report with error section; log ERROR"
+      on_timeout:
+        action: "return completed sections with partial: true flag"
+
+    channel_tweaks:
+      note: "Reporting skill is internal only — no channel-adaptation needed."
+
+    postgresql:
+      reads:
+        - table: tickets
+          hint: "COUNT, AVG(EXTRACT(EPOCH FROM resolved_at - created_at)) GROUP BY status, channel"
+        - table: sentiment_events
+          hint: "AVG(sentiment_score), COUNT(anger_detected=true) GROUP BY channel, DATE(processed_at)"
+        - table: escalation_decisions
+          hint: "COUNT escalate=true GROUP BY primary_reason, channel, customer_tier"
+        - table: knowledge_retrieval_logs
+          hint: "COUNT result_count=0 GROUP BY DATE; SELECT query_text WHERE result_count=0 LIMIT 20"
+        - table: agent_performance_logs
+          hint: "AVG/P95 latency per skill"
+      writes:
+        - table: daily_reports
+          fields: [report_date, report_json, generated_at, channel_filter]
+          hint: "Upsert by report_date + channel_filter for idempotency."
+
+    incubation_impl: "skills/skills_impl.py::generate_report_mcp"
+    specialization_impl: "skills/skills_impl.py::generate_report"
+
+    example_usage:
+      input:
+        report_date: "2026-03-01"
+        channel_filter: "all"
+        include_sections: ["ticket_summary", "sentiment_trends", "escalation_breakdown", "kb_gaps"]
+        output_format: "json"
+      output:
+        report_date: "2026-03-01"
+        generated_at: "2026-03-02T07:00:05Z"
+        ticket_summary:
+          total_tickets: 142
+          resolved: 118
+          escalated: 19
+          open: 5
+          resolution_rate: 0.831
+          avg_resolution_time_mins: 4.2
+        sentiment_trends:
+          avg_score_overall: 0.61
+          avg_score_by_channel:
+            email: 0.65
+            whatsapp: 0.54
+            web_form: 0.68
+            web_chat: 0.60
+          anger_event_count: 12
+          trend_direction: "stable"
+        escalation_breakdown:
+          total_escalations: 19
+          by_reason:
+            pricing_negotiation: 7
+            explicit_human_request: 5
+            low_sentiment_score: 4
+            legal_language_detected: 3
+          by_channel:
+            whatsapp: 10
+            email: 6
+            web_form: 3
+          by_tier:
+            free: 8
+            pro: 7
+            enterprise: 4
+          escalation_rate_pct: 13.4
+        kb_gaps:
+          zero_result_queries: 11
+          top_unanswered_topics:
+            - "API rate limit documentation"
+            - "SCIM provisioning setup"
+            - "Custom domain SSL"
+          low_confidence_docs: []
+
+# =============================================================================
+# IMPLEMENTATION PATHWAY
+# =============================================================================
+#
+# INCUBATION PHASE (MVP — current sprint)
+# ----------------------------------------
+# Each skill is implemented as a standalone async Python function in
+# skills/skills_impl.py.  Functions accept plain dicts (JSON-deserialized)
+# and return plain dicts.  They are exposed as MCP tools via a lightweight
+# FastAPI or MCP-compatible server wrapper.
+#
+# File: skills/skills_impl.py
+# Pattern per skill:
+#   async def <skill_name>_mcp(input: dict) -> dict:
+#       ...validate input...
+#       ...execute logic...
+#       ...persist to PostgreSQL...
+#       return output_dict
+#
+# SPECIALIZATION PHASE (production hardening)
+# -------------------------------------------
+# Each _mcp function is promoted to a typed OpenAI Agents SDK @function_tool:
+#   - Input model: Pydantic BaseModel with field validators
+#   - Decorated with @function_tool
+#   - Registered on the main Agent or sub-agent as appropriate
+#   - Pydantic models double as JSON Schema for the OpenAI tool spec
+#
+# File: skills/skills_impl.py  (same file, Specialization section)
+# Pattern per skill:
+#   class <SkillName>Input(BaseModel): ...
+#   @function_tool
+#   async def <skill_name>(input: <SkillName>Input) -> dict: ...
+#
+# PostgreSQL migrations are in: db/migrations/
+# MCP server entry point: mcp_server.py
+# OpenAI Agent wiring: agent_wiring.py
+# =============================================================================

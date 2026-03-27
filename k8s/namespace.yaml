@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cs-fte
+  labels:
+    app: cs-fte
+    environment: production

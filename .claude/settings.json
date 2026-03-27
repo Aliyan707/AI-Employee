@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/ralph_wiggum_stop.py"
+            "command": "python \"C:\\Users\\Cs\\Desktop\\Hackathon 5\\.claude\\hooks\\ralph_wiggum_stop.py\""
           }
         ]
       }

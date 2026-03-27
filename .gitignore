@@ -1,9 +1,20 @@
-# Gold-Tier AI Employee - .gitignore
-# Generated: 2026-02-19
+# =============================================================================
+# CS AI FTE — .gitignore
+# Python + Node.js + Docker + K8s
+# =============================================================================
 
-# ============================================
-# Python (Watchers, MCP Servers)
-# ============================================
+# --- Environment & Secrets ---
+.env
+.env.local
+.env.*.local
+!.env.example
+!.env.local.example
+secrets/
+*.pem
+*.key
+*.p12
+
+# --- Python ---
 __pycache__/
 *.py[cod]
 *$py.class
@@ -24,142 +35,61 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
+
+# Virtual environments
 .venv/
 venv/
-ENV/
 env/
+ENV/
+env.bak/
+venv.bak/
 
-# ============================================
-# Node.js (MCP Servers)
-# ============================================
+# pytest
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.log
+coverage.xml
+*.xml
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# --- Node.js / Next.js ---
 node_modules/
+.next/
+out/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-lerna-debug.log*
-.npm
 .pnpm-debug.log*
-dist/
-build/
+*.tsbuildinfo
 
-# ============================================
-# Environment & Secrets (CRITICAL)
-# ============================================
-.env
-.env.*
-!.env.example
-*.env
-credentials.json
-token.pickle
-gmail_token.pickle
-whatsapp_session/
-*.key
-*.pem
-*.crt
-*.p12
-*.pfx
-config.secret.*
-secrets/
-*.secret.yaml
+# --- Docker ---
+.docker/
 
-# ============================================
-# Obsidian Vault Working Files
-# ============================================
-.obsidian/
-.trash/
-*.tmp
-*.bak
-.DS_Store
-Thumbs.db
+# --- Kubernetes secrets (never commit real values) ---
+k8s/secret.yaml
 
-# ============================================
-# Logs & Runtime Data
-# ============================================
-*.log
-logs/
-*.pid
-*.seed
-*.pid.lock
-pids/
-
-# ============================================
-# IDE & Editor
-# ============================================
+# --- IDE ---
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-.project
-.classpath
-.settings/
-
-# ============================================
-# Operating System
-# ============================================
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
-Desktop.ini
-$RECYCLE.BIN/
 
-# ============================================
-# Testing & Coverage
-# ============================================
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.nox/
-coverage/
-*.cover
-.hypothesis/
+# --- Test fixtures with real data ---
+tests/fixtures/real_*
 
-# ============================================
-# Database Files (if any)
-# ============================================
-*.db
-*.sqlite
-*.sqlite3
+# --- Logs ---
+*.log
+logs/
 
-# ============================================
-# MCP Server Credentials & Sessions
-# ============================================
-mcp-servers/*/gmail-credentials.json
-mcp-servers/*/gmail-token.json
-mcp-servers/*/linkedin-session/
-mcp-servers/*/odoo_password.txt
-*password.txt
-*_password.txt
-
-# ============================================
-# MCP Server Build Artifacts
-# ============================================
-mcp-servers/*/node_modules/
-mcp-servers/*/dist/
-mcp-servers/*/build/
-mcp-servers/*/.venv/
-mcp-servers/*/venv/
-mcp-servers/*/__pycache__/
-
-# ============================================
-# Temporary & Cache
-# ============================================
-*.cache
-.cache/
-tmp/
-temp/
-*.tmp
-
-# ============================================
-# Package Manager Locks (optional - keep if needed)
-# ============================================
-# package-lock.json
-# yarn.lock
-# pnpm-lock.yaml
-# poetry.lock
+# --- Compiled files ---
+*.pyc
+*.pyo

@@ -1,0 +1,81 @@
+# ClusterIP service for internal API access
+apiVersion: v1
+kind: Service
+metadata:
+  name: cs-api-service
+  namespace: cs-fte
+  labels:
+    app: cs-fte
+    component: api
+spec:
+  type: ClusterIP
+  selector:
+    app: cs-fte
+    component: api
+  ports:
+    - port: 8000
+      targetPort: 8000
+      name: http
+
+---
+# LoadBalancer service for external API access
+# For local minikube testing, change type to NodePort
+apiVersion: v1
+kind: Service
+metadata:
+  name: cs-api-lb
+  namespace: cs-fte
+  labels:
+    app: cs-fte
+    component: api
+    tier: external
+spec:
+  type: LoadBalancer
+  selector:
+    app: cs-fte
+    component: api
+  ports:
+    - port: 80
+      targetPort: 8000
+      name: http
+
+---
+# ClusterIP service for frontend
+apiVersion: v1
+kind: Service
+metadata:
+  name: cs-frontend-service
+  namespace: cs-fte
+  labels:
+    app: cs-fte
+    component: frontend
+spec:
+  type: ClusterIP
+  selector:
+    app: cs-fte
+    component: frontend
+  ports:
+    - port: 3000
+      targetPort: 3000
+      name: http
+
+---
+# LoadBalancer service for external frontend access
+apiVersion: v1
+kind: Service
+metadata:
+  name: cs-frontend-lb
+  namespace: cs-fte
+  labels:
+    app: cs-fte
+    component: frontend
+    tier: external
+spec:
+  type: LoadBalancer
+  selector:
+    app: cs-fte
+    component: frontend
+  ports:
+    - port: 3000
+      targetPort: 3000
+      name: http
